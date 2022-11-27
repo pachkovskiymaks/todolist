@@ -1,97 +1,146 @@
-import React, { useEffect, useState } from 'react';
-import { Row, Col, Button, ButtonGroup } from 'react-bootstrap'
+import React, {useEffect, useState} from 'react';
+import {Button, ButtonGroup, Col, FormControl, Row} from 'react-bootstrap'
 import s from './TodoList.module.css'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faSave, faTrash, faEdit, faLock, faLockOpen } from '@fortawesome/free-solid-svg-icons'
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faEdit, faLock, faLockOpen, faSave, faTrash} from '@fortawesome/free-solid-svg-icons'
+import axios from "axios";
 
 
-
-function TodoList({ todo, setTodo }) {
+function TodoList({todo, setTodo, apiKey}) {
 
     const [edit, setEdit] = useState(null)
-    const [value, setValue] = useState('')
+    const [title, setTitle] = useState(null)
     const [filtered, setFiltered] = useState(todo)
 
-    useEffect( ()=>{
+    useEffect(() => {
         setFiltered(todo)
-    }, [todo] )
+    }, [todo])
 
     function todoFilter(status) {
-        if(status === 'all') {
+        if (status === undefined) {
             setFiltered(todo)
-        }else {
-            let newTodo = [...todo].filter( item => item.status === status)
+        } else {
+            let newTodo = [...todo].filter(item => item.status === status)
             setFiltered(newTodo)
         }
     }
 
     function deleteTodo(id) {
-        let newTodo = [...todo].filter(item => item.id != id)
-        setTodo(newTodo)
+        let newTodo = [...todo].find(it => it.id === id)
+        if (newTodo) {
+            axios.delete(`https://social-network.samuraijs.com/api/1.1/todo-lists/${newTodo.todoListId}/tasks/${newTodo.id}`, {
+                withCredentials: true,
+                headers: {
+                    'API-KEY': apiKey
+                }
+            }).then(() => {
+                newTodo = [...todo].filter(item => item.id !== id)
+                setTodo(newTodo)
+            })
+        }
+
     }
 
-    function statusTodo(id) {
-        let newTodo = [...todo].filter(item => {
-            if (item.id == id) {
-                item.status = !item.status
+    function setStatusTodo(item) {
+        item.status = item.status ? 0 : 1;
+        saveTodo(item)
+    }
+
+    function setNewTitle(item) {
+        item.title = title || item.title
+        saveTodo(item)
+    }
+
+    function editTodo(item) {
+        setEdit(item.id);
+        setTitle(item.title)
+    }
+
+    function saveTodo(item) {
+        axios.put(`https://social-network.samuraijs.com/api/1.1/todo-lists/${item.todoListId}/tasks/${item.id}`, {
+            title: item.title,
+            completed: !!item.status,
+            status: item.status,
+            priority: 1,
+            description: '',
+            startDate: new Date(),
+            deadline: new Date().toISOString()
+
+        }, {
+            withCredentials: true,
+            headers: {
+                'API-KEY': apiKey
             }
-            return item
-        })
-        setTodo(newTodo)
+        }).then(() => {
+            setEdit(null)
+            setTitle(null)
+            setTodo(todo.map(oldIdem => {
+                if (item.id === oldIdem.id) {
+                    console.log(item)
+                    return item;
+                }
+                return oldIdem;
+            }));
+        }).catch((error) => {
+            console.error(error);
+        });
     }
 
-    function editTodo(id, title) {
-        setEdit(id)
-        setValue(title)
-    }
-
-    function saveTodo(id) {
-        let newTodo = [...todo].map(item => {
-            if (item.id == id) {
-                item.title = value
-            }
-            return item
-        })
-        setTodo(newTodo)
-        setEdit(null)
+    function doSearch(searchString) {
+        if (searchString !== null && searchString !== '') {
+            setFiltered([...todo].filter(item => item.title.includes(searchString)))
+        } else {
+            setFiltered(todo)
+        }
     }
 
     return (
         <div>
             <Row>
-                <Col className={s.filter}>
-                <ButtonGroup aria-label="Basic example" className={s.btns}>
-                <Button variant="secondary" onClick={ ()=>todoFilter('all') }>All</Button>
-                <Button variant="secondary" onClick={ ()=>todoFilter(true) }>Open</Button>
-                <Button variant="secondary" onClick={ ()=>todoFilter(false) }>Close</Button>
-            </ButtonGroup>
+                <Col className={s.addTodoForm}>
+                    <FormControl placeholder="Search by title..." onChange={(e) => doSearch(e.target.value)}
+                                 className={s.addTodoForm}/>
                 </Col>
             </Row>
-          
+            <Row>
+                <Col className={s.filter}>
+                    <ButtonGroup aria-label="Basic example" className={s.btns}>
+                        <Button variant="secondary" onClick={() => todoFilter()}>All</Button>
+                        <Button variant="secondary" onClick={() => todoFilter(1)}>Open</Button>
+                        <Button variant="secondary" onClick={() => todoFilter(0)}>Close</Button>
+                    </ButtonGroup>
+                </Col>
+            </Row>
+
             {
                 filtered.map(item => (
                     <div key={item.id} className={s.listItem}>
                         {
-                            edit == item.id ?
+                            edit === item.id ?
                                 <div>
-                                    <input value={value} onChange={(e) => setValue(e.target.value)} />
+                                    <input value={title} onChange={(e) => setTitle(e.target.value)}/>
                                 </div> :
                                 <div className={!item.status ? s.close : ''}>{item.title}</div>
                         }
 
                         {
-                            edit == item.id ?
+                            edit === item.id ?
                                 <div>
-                                    <Button onClick={() => saveTodo(item.id)} size="sm"><FontAwesomeIcon icon={ faSave } /></Button>
+                                    <Button onClick={() => setNewTitle(item)} size="sm"><FontAwesomeIcon
+                                        icon={faSave}/></Button>
                                 </div> :
                                 <div>
-                                    <Button onClick={() => deleteTodo(item.id)} size="sm"><FontAwesomeIcon icon={ faTrash } /></Button>
-                                    <Button onClick={() => editTodo(item.id, item.title)} className={s.btn} size="sm"><FontAwesomeIcon icon={ faEdit } /></Button>
-                                    <Button onClick={() => statusTodo(item.id)} className={s.btn} size="sm">
+                                    <Button onClick={() => deleteTodo(item.id)} size="sm"><FontAwesomeIcon
+                                        icon={faTrash}/></Button>
+                                    <Button onClick={() => editTodo(item)} className={s.btn}
+                                            size="sm"><FontAwesomeIcon icon={faEdit}/></Button>
+                                    <Button onClick={() => setStatusTodo(item)} className={s.btn}
+                                            size="sm">
                                         {
-                                            item.status ? <FontAwesomeIcon icon={ faLockOpen } />  : <FontAwesomeIcon icon={ faLock } />
+                                            item.status ? <FontAwesomeIcon icon={faLockOpen}/> :
+                                                <FontAwesomeIcon icon={faLock}/>
                                         }
-                                 </Button>
+                                    </Button>
                                 </div>
                         }
 
